@@ -1463,4 +1463,59 @@ public class QueryTasksIT {
 
     }
 
+    @Test
+    public void should_getTask_when_queryFilteredByProcessDefinitionName() {
+        //given
+        TaskImpl task1 = aCreatedTask("Task 1");
+        task1.setProcessDefinitionName("task1ProcessDefinitionName");
+        eventsAggregator.addEvents(new CloudTaskCreatedEventImpl(task1));
+
+        TaskImpl task2 = aCreatedTask("Task 2");
+        task2.setProcessDefinitionName("task2ProcessDefinitionName");
+        eventsAggregator.addEvents(new CloudTaskCreatedEventImpl(task2));
+
+        eventsAggregator.sendAll();
+
+        await().untilAsserted(() -> {
+
+            //when
+            ResponseEntity<PagedModel<Task>> responseEntity = executeRequestGetTasks();
+
+            //then
+            assertThat(responseEntity).isNotNull();
+            assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+            assertThat(responseEntity.getBody()).isNotNull();
+            Collection<Task> tasks = responseEntity.getBody().getContent();
+            assertThat(tasks)
+                    .extracting(Task::getId,
+                            Task::getProcessDefinitionName)
+                    .contains(tuple(task1.getId(),
+                                    "task1ProcessDefinitionName"),
+                            tuple(task2.getId(), 
+                                    "task2ProcessDefinitionName"));
+        });
+
+        await().untilAsserted(() -> {
+
+            //when
+            ResponseEntity<PagedModel<Task>> responseEntity = testRestTemplate.exchange(TASKS_URL + "?processDefinitionName={processDefinitionName}",
+                    HttpMethod.GET,
+                    keycloakTokenProducer.entityWithAuthorizationHeader(),
+                    PAGED_TASKS_RESPONSE_TYPE,
+                    "task2ProcessDefinitionName");
+
+            //then
+            assertThat(responseEntity).isNotNull();
+            assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+            assertThat(responseEntity.getBody()).isNotNull();
+            Collection<Task> tasks = responseEntity.getBody().getContent();
+            assertThat(tasks)
+                    .extracting(Task::getId)
+                    .containsExactly(task2.getId());
+        });
+
+    }
+
 }
